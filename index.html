@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Upscale IA local — RX 6600</title>
+<style>
+  body{font-family:system-ui,sans-serif;max-width:760px;margin:2rem auto;padding:0 1rem;background:#111;color:#eee}
+  #drop{border:2px dashed #666;border-radius:12px;padding:3rem 1rem;text-align:center;cursor:pointer}
+  #drop.over{border-color:#4caf50;background:#1a2b1a}
+  select,button{font-size:1rem;padding:.5rem .8rem;margin:.3rem}
+  button{background:#4caf50;color:#fff;border:0;border-radius:8px;cursor:pointer}
+  .job{border:1px solid #333;border-radius:8px;padding:.8rem;margin:.8rem 0}
+  video{max-width:100%;max-height:240px;background:#000}
+  .row{display:flex;gap:1rem;flex-wrap:wrap}
+  small{color:#999}
+</style>
+</head>
+<body>
+<h1>Upscale IA local <small>RX 6600 · Vulkan · 100% offline</small> <span id="gpubadge" style="font-size:.8rem">…</span></h1>
+<div id="drop">Glisse ton rush ici ou clique pour choisir (mp4/mov, &lt; 4 Go)<br><input type="file" id="f" accept="video/*" hidden></div>
+<p>
+  <label>Échelle <select id="scale"><option value="2" selected>x2 (720p→1440p, 1080p→4K*)</option><option value="3">x3</option><option value="4">x4</option></select></label>
+  <label>Modèle <select id="model"><option value="anime" selected>animevideov3 — rapide, vidéo (recommandé)</option><option value="general">x4plus — HQ photo (x4 seul, lent)</option><option value="anime-hq">x4plus-anime — HQ animé (x4 seul)</option></select></label>
+  <label>Qualité <select id="quality"><option value="vite" selected>Vite — encodage GPU, JPG (recommandé)</option><option value="hq">HQ — PNG + IA x4→x2 + x264 slow (2x plus lent, meilleurs détails)</option></select></label>
+  <button id="go" disabled>Upscaler</button>
+</p>
+<p><small>* 1080p→4K = x2 pile. x4 sur 1080p = 4K+ (lourd, ~2-4 fps). 1 min 1080p ≈ 10-30 min de calcul. Un seul job à la fois (8 Go VRAM).</small></p>
+<div id="jobs"></div>
+<div class="row"><div><h3>Entrée</h3><video id="prevIn" controls></video></div><div><h3>Sortie</h3><video id="prevOut" controls></video></div></div>
+<script>
+fetch('/api/gpu').then(r=>r.json()).then(g=>{
+  const b=document.getElementById('gpubadge');
+  b.textContent=g.ia_device?('🟢 GPU: '+g.ia_device.split('(')[0].trim()+(g.vaapi?' + enc VA-API':'')):'🔴 pas de GPU — mode CPU';
+  b.style.color=g.ia_device?'#4caf50':'#f44336';
+}).catch(()=>{});
+const drop=document.getElementById('drop'),fi=document.getElementById('f'),go=document.getElementById('go');
+let file=null;
+drop.onclick=()=>fi.click();
+['dragover','dragenter'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add('over')}));
+['dragleave','drop'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove('over')}));
+drop.addEventListener('drop',ev=>{file=ev.dataTransfer.files[0];sel()});
+fi.onchange=()=>{file=fi.files[0];sel()};
+function sel(){if(!file)return;go.disabled=false;drop.firstChild.textContent=file.name+' — prêt. ';document.getElementById('prevIn').src=URL.createObjectURL(file)}
+go.onclick=async()=>{
+  const fd=new FormData();fd.append('file',file);
+  fd.append('scale',document.getElementById('scale').value);
+  fd.append('model',document.getElementById('model').value);
+  fd.append('quality',document.getElementById('quality').value);
+  const r=await fetch('/api/upload',{method:'POST',body:fd});const{id}=await r.json();
+  poll(id);
+};
+async function poll(id){
+  const box=document.getElementById('jobs');let div=document.getElementById('j_'+id);
+  if(!div){div=document.createElement('div');div.className='job';div.id='j_'+id;box.prepend(div)}
+  const j=await(await fetch('/api/jobs/'+id)).json();
+  div.innerHTML=`<b>${j.file}</b> x${j.scale} ${j.model}${j.hq?' HQ':''} ${(j.gpu===false)?'🔴CPU':(j.gpu?'🟢GPU':'')} — <b>${j.status}</b> ${j.progress}%<br><small>${j.msg||''}${j.engine?' ['+j.engine+']':''}</small>`+
+    (j.status==='done'?`<br><a href="/api/download/${id}"><button>Télécharger</button></a> <button onclick="document.getElementById('prevOut').src='/api/download/${id}'">Aperçu</button>`:'');
+  if(j.status==='running'||j.status==='queued')setTimeout(()=>poll(id),2000);
+}
+</script>
+</body>
+</html>
