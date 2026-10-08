@@ -1,0 +1,10 @@
+# Binaires + modèles (récupérés par setup.sh, ~56 Mo)
+bin/
+models/
+# Rushs + résultats + états locaux (tes vidéos ne partent jamais sur GitHub)
+input/*
+output/*
+jobs/*
+# Généré local par setup.sh --bureau (chemin absolu de TA machine)
+*.desktop
+__pycache__/
